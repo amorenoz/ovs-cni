@@ -42,6 +42,9 @@ type NetConf struct {
 	SocketFile             string   `json:"socket_file"`
 	LinkStateCheckRetries  int      `json:"link_state_check_retries"`
 	LinkStateCheckInterval int      `json:"link_state_check_interval"`
+	RuntimeConfig          struct {
+		CNIDeviceInfoFile string `json:"CNIDeviceInfoFile,omitempty"`
+	} `json:"runtimeConfig,omitempty"`
 }
 
 // netConfAlias is used to avoid infinite recursion when marshaling NetConf.
@@ -104,9 +107,10 @@ type Trunk struct {
 // this is intended to be used only for storing and retrieving config
 // to/from a data store (example file cache).
 type CachedNetConf struct {
-	Netconf       *NetConf
-	OrigIfName    string
-	UserspaceMode bool
+	Netconf             *NetConf
+	OrigIfName          string
+	UserspaceMode       bool
+	VhostUserSocketPath string
 }
 
 // CachedPrevResultNetConf containing PrevResult.

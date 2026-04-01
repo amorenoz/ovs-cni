@@ -43,6 +43,7 @@ RUN go build -tags no_openssl -o /workdir/bin/ovs ./cmd/plugin
 RUN go build -tags no_openssl -o /workdir/bin/marker ./cmd/marker
 RUN go build -tags no_openssl -o /workdir/bin/ovs-mirror-producer ./cmd/mirror-producer
 RUN go build -tags no_openssl -o /workdir/bin/ovs-mirror-consumer ./cmd/mirror-consumer
+RUN go build -tags no_openssl -o /workdir/bin/ovs-vhostuser ./cmd/vhostuser
 
 FROM registry.access.redhat.com/ubi9/ubi-minimal
 

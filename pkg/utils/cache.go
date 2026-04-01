@@ -32,6 +32,11 @@ var (
 	rootDir = ""
 )
 
+// SetCacheRootDir overrides the root directory for cache paths. Used in tests.
+func SetCacheRootDir(dir string) {
+	rootDir = dir
+}
+
 // SaveCache takes in key as string and a json encoded struct Conf and save this Conf in cache dir
 func SaveCache(key string, conf interface{}) error {
 	confBytes, err := json.Marshal(conf)

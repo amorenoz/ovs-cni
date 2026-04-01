@@ -158,9 +158,11 @@ func (ovsd *OvsDriver) ovsdbTransact(ops []ovsdb.Operation) ([]ovsdb.OperationRe
 
 // **************** OVS driver API ********************
 
-// CreatePort Create an internal port in OVS
-func (ovsd *OvsBridgeDriver) CreatePort(intfName, contNetnsPath, contIfaceName, ovnPortName string, ofportRequest uint, vlanTag uint, trunks []uint, portType string, intfType string, contPodUid string) error {
-	intfUUID, intfOp, err := createInterfaceOperation(intfName, ofportRequest, ovnPortName, intfType)
+// CreatePort creates a port and interface in OVS and attaches it to the bridge.
+// The options parameter sets OVS interface options (e.g. {"vhost-server-path": "/path/to/sock"}).
+// Pass nil for no options.
+func (ovsd *OvsBridgeDriver) CreatePort(intfName, contNetnsPath, contIfaceName, ovnPortName string, ofportRequest uint, vlanTag uint, trunks []uint, portType string, intfType string, contPodUid string, options map[string]string) error {
+	intfUUID, intfOp, err := createInterfaceOperation(intfName, ofportRequest, ovnPortName, intfType, options)
 	if err != nil {
 		return err
 	}
@@ -210,6 +212,23 @@ func (ovsd *OvsBridgeDriver) DeletePort(intfName string) error {
 
 	_, err = ovsd.ovsdbTransact(operations)
 	return err
+}
+
+// CleanPorts removes all ports whose interfaces have an error.
+func (ovsd *OvsBridgeDriver) CleanPorts() error {
+	ifaces, err := ovsd.FindInterfacesWithError()
+	if err != nil {
+		return fmt.Errorf("clean ports: %v", err)
+	}
+	for _, iface := range ifaces {
+		log.Printf("Info: interface %s has error: removing corresponding port", iface)
+		if err := ovsd.DeletePort(iface); err != nil {
+			// Don't return an error here, just log its occurrence.
+			// Something else may have removed the port already.
+			log.Printf("Error: %v\n", err)
+		}
+	}
+	return nil
 }
 
 func getExternalIDs(row map[string]interface{}) (map[string]string, error) {
@@ -817,7 +836,7 @@ func (ovsd *OvsDriver) isMirrorExistsByConditions(conditions []ovsdb.Condition) 
 	return true, nil
 }
 
-func createInterfaceOperation(intfName string, ofportRequest uint, ovnPortName string, intfType string) (ovsdb.UUID, *ovsdb.Operation, error) {
+func createInterfaceOperation(intfName string, ofportRequest uint, ovnPortName string, intfType string, options map[string]string) (ovsdb.UUID, *ovsdb.Operation, error) {
 	intfUUIDStr := fmt.Sprintf("Intf%s", intfName)
 	intfUUID := ovsdb.UUID{GoUUID: intfUUIDStr}
 
@@ -827,6 +846,15 @@ func createInterfaceOperation(intfName string, ofportRequest uint, ovnPortName s
 	// Configure interface type if not nil
 	if intfType != "" {
 		intf["type"] = intfType
+	}
+
+	// Configure interface options (e.g. vhost-server-path)
+	if len(options) > 0 {
+		optionsMap, err := ovsdb.NewOvsMap(options)
+		if err != nil {
+			return ovsdb.UUID{}, nil, err
+		}
+		intf["options"] = optionsMap
 	}
 
 	// Configure interface ID for ovn

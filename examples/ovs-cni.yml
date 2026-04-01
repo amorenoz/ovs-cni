@@ -39,7 +39,8 @@ spec:
           - >
             cp /ovs /host/opt/cni/bin/ovs &&
             cp /ovs-mirror-producer /host/opt/cni/bin/ovs-mirror-producer &&
-            cp /ovs-mirror-consumer /host/opt/cni/bin/ovs-mirror-consumer
+            cp /ovs-mirror-consumer /host/opt/cni/bin/ovs-mirror-consumer &&
+            cp /ovs-vhostuser /host/opt/cni/bin/ovs-vhostuser
         imagePullPolicy: IfNotPresent
         securityContext:
           privileged: true
