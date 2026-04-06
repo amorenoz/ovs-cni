@@ -23,25 +23,30 @@ import (
 	current "github.com/containernetworking/cni/pkg/types/100"
 )
 
-// NetConfs can be either NetConf or MirrorNetConf
+// NetConfs can be NetConf, VhostUserNetConf or MirrorNetConf
 type NetConfs interface {
-	NetConf | MirrorNetConf
+	NetConf | MirrorNetConf | VhostUserNetConf
 }
 
-// NetConf extends types.NetConf for ovs-cni
-type NetConf struct {
+// BaseNetConf extends types.NetConf for ovs-cni
+type BaseNetConf struct {
 	types.NetConf
-	BrName                 string   `json:"bridge,omitempty"`
-	VlanTag                *uint    `json:"vlan"`
-	MTU                    int      `json:"mtu"`
-	Trunk                  []*Trunk `json:"trunk,omitempty"`
-	DeviceID               string   `json:"deviceID"`       // PCI address of a VF in valid sysfs format
-	OfportRequest          uint     `json:"ofport_request"` // OpenFlow port number in range 1 to 65,279
-	InterfaceType          string   `json:"interface_type"` // The type of interface on ovs.
-	ConfigurationPath      string   `json:"configuration_path"`
-	SocketFile             string   `json:"socket_file"`
-	LinkStateCheckRetries  int      `json:"link_state_check_retries"`
-	LinkStateCheckInterval int      `json:"link_state_check_interval"`
+	BrName            string   `json:"bridge,omitempty"`
+	VlanTag           *uint    `json:"vlan"`
+	MTU               int      `json:"mtu"`
+	Trunk             []*Trunk `json:"trunk,omitempty"`
+	OfportRequest     uint     `json:"ofport_request"` // OpenFlow port number in range 1 to 65,279
+	InterfaceType     string   `json:"interface_type"` // The type of interface on ovs.
+	ConfigurationPath string   `json:"configuration_path"`
+	SocketFile        string   `json:"socket_file"`
+}
+
+// NetConf extends BaseNetConf for ovs-cni
+type NetConf struct {
+	BaseNetConf
+	DeviceID               string `json:"deviceID"` // PCI address of a VF in valid sysfs format
+	LinkStateCheckRetries  int    `json:"link_state_check_retries"`
+	LinkStateCheckInterval int    `json:"link_state_check_interval"`
 }
 
 // netConfAlias is used to avoid infinite recursion when marshaling NetConf.
@@ -56,6 +61,27 @@ type netConfAlias NetConf
 // we ensure all fields are properly marshaled.
 func (n NetConf) MarshalJSON() ([]byte, error) {
 	return json.Marshal(netConfAlias(n))
+}
+
+type VhostUserNetConf struct {
+	BaseNetConf
+	RuntimeConfig struct {
+		CNIDeviceInfoFile string `json:"CNIDeviceInfoFile,omitempty"`
+	} `json:"runtimeConfig"`
+}
+
+// vhostUserNetConfAlias is used to avoid infinite recursion when marshaling VhostUserNetConf.
+// The embedded types.VhostUserNetConf has a custom MarshalJSON that only marshals its own fields,
+// which would cause OVS-specific fields (like BrName) to be lost during marshaling.
+type vhostUserNetConfAlias VhostUserNetConf
+
+// MarshalJSON implements custom JSON marshaling for VhostUserNetConf.
+// This is necessary because the embedded types.VhostUserNetConf (which is types.PluginConf)
+// has its own MarshalJSON method that only marshals PluginConf fields, causing
+// OVS-specific fields like BrName to be lost. By defining our own MarshalJSON,
+// we ensure all fields are properly marshaled.
+func (n VhostUserNetConf) MarshalJSON() ([]byte, error) {
+	return json.Marshal(vhostUserNetConfAlias(n))
 }
 
 // MirrorNetConf extends types.NetConf for ovs-mirrors
@@ -116,4 +142,13 @@ type CachedNetConf struct {
 // because prevResult wasn't available in cmdDel on those versions.
 type CachedPrevResultNetConf struct {
 	PrevResult *current.Result
+}
+
+// CachedVhostUserNetConf containing VhostUserNetConfig, to be used
+// only for storing and retrieving config to/from a data store
+// (example file cache).
+type CachedVhostUserNetConf struct {
+	Netconf             *VhostUserNetConf
+	OrigIfName          string
+	VhostUserSocketPath string
 }

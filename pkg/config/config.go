@@ -61,6 +61,23 @@ func LoadConf(data []byte) (*types.NetConf, error) {
 	return netconf, nil
 }
 
+// LoadVhostUserConf parses and validates stdin netconf and returns a VhostUserNetConf object
+func LoadVhostUserConf(bytes []byte) (*types.VhostUserNetConf, error) {
+	netconf := &types.VhostUserNetConf{}
+	if err := json.Unmarshal(bytes, netconf); err != nil {
+		return nil, fmt.Errorf("failed to load vhost-user netconf: %v", err)
+	}
+	flatNetConf, err := loadFlatNetConf[types.VhostUserNetConf](netconf.ConfigurationPath)
+	if err != nil {
+		return nil, err
+	}
+	netconf, err = mergeConf(netconf, flatNetConf)
+	if err != nil {
+		return nil, err
+	}
+	return netconf, nil
+}
+
 // LoadMirrorConf parses and validates stdin netconf and returns MirrorNetConf object
 func LoadMirrorConf(data []byte) (*types.MirrorNetConf, error) {
 	netconf, err := loadMirrorNetConf(data)
