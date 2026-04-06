@@ -34,6 +34,7 @@ import (
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	current "github.com/containernetworking/cni/pkg/types/100"
 	nadv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
+	"golang.org/x/sys/unix"
 
 	"github.com/k8snetworkplumbingwg/ovs-cni/pkg/config"
 	"github.com/k8snetworkplumbingwg/ovs-cni/pkg/ovsdb"
@@ -79,12 +80,28 @@ func loadVhostUserDeviceInfo(devInfoFilePath string) (*nadv1.VhostDevice, error)
 	return devInfo.VhostUser, nil
 }
 
+const (
+	targetUID   = 107
+	targetGID   = 107
+	selinuxType = "system_u:object_r:container_file_t:s0"
+)
+
 func createSocketDir(dir string) error {
 	oldMask := syscall.Umask(0)
 	defer syscall.Umask(oldMask)
 	var err error
 	if err = os.MkdirAll(dir, 0775); err != nil {
 		return fmt.Errorf("failed to create vhost-user socket directory %s: %v", dir, err)
+	}
+	// HACK: Set owner:group to the ones libvirt uses
+	if err := unix.Chown(dir, targetUID, targetGID); err != nil {
+		return fmt.Errorf("failed to chown %s: %v", dir, err)
+	}
+
+	labelBytes := []byte(selinuxType)
+	if err := unix.Setxattr(dir, "security.selinux", labelBytes, 0); err != nil {
+		// Some filesystems don't support xattrs; we log but may want to continue
+		return fmt.Errorf("failed to setxattr %s: %v", dir, err)
 	}
 
 	// HACK: Set ACLs for openvswitch user
@@ -103,6 +120,7 @@ func createSocketDir(dir string) error {
 		}
 		return fmt.Errorf("failed to set default ACL for openvswitch user on %s: %v", dir, err)
 	}
+
 	return err
 }
 
