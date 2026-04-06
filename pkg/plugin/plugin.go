@@ -325,7 +325,7 @@ func CmdAdd(args *skel.CmdArgs) error {
 	}
 
 	// removes all ports whose interfaces have an error
-	if err := cleanPorts(ovsBridgeDriver); err != nil {
+	if err := ovsBridgeDriver.CleanPorts(); err != nil {
 		return err
 	}
 
@@ -506,23 +506,6 @@ func getOvsPortForContIface(ovsDriver *ovsdb.OvsBridgeDriver, contIface string, 
 	return ovsDriver.GetOvsPortForContIface(contIface, contNetnsPath)
 }
 
-// cleanPorts removes all ports whose interfaces have an error.
-func cleanPorts(ovsDriver *ovsdb.OvsBridgeDriver) error {
-	ifaces, err := ovsDriver.FindInterfacesWithError()
-	if err != nil {
-		return fmt.Errorf("clean ports: %v", err)
-	}
-	for _, iface := range ifaces {
-		log.Printf("Info: interface %s has error: removing corresponding port", iface)
-		if err := ovsDriver.DeletePort(iface); err != nil {
-			// Don't return an error here, just log its occurrence.
-			// Something else may have removed the port already.
-			log.Printf("Error: %v\n", err)
-		}
-	}
-	return nil
-}
-
 func removeOvsPort(ovsDriver *ovsdb.OvsBridgeDriver, portName string) error {
 	return ovsDriver.DeletePort(portName)
 }
@@ -605,7 +588,7 @@ func CmdDel(args *skel.CmdArgs) error {
 			}
 		} else {
 			// In accordance with the spec we clean up as many resources as possible.
-			if err := cleanPorts(ovsBridgeDriver); err != nil {
+			if err := ovsBridgeDriver.CleanPorts(); err != nil {
 				return err
 			}
 		}
@@ -657,7 +640,7 @@ func CmdDel(args *skel.CmdArgs) error {
 	}
 
 	// removes all ports whose interfaces have an error
-	if err := cleanPorts(ovsBridgeDriver); err != nil {
+	if err := ovsBridgeDriver.CleanPorts(); err != nil {
 		return err
 	}
 

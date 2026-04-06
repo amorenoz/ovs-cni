@@ -212,6 +212,23 @@ func (ovsd *OvsBridgeDriver) DeletePort(intfName string) error {
 	return err
 }
 
+// CleanPorts removes all ports whose interfaces have an error.
+func (ovsd *OvsBridgeDriver) CleanPorts() error {
+	ifaces, err := ovsd.FindInterfacesWithError()
+	if err != nil {
+		return fmt.Errorf("clean ports: %v", err)
+	}
+	for _, iface := range ifaces {
+		log.Printf("Info: interface %s has error: removing corresponding port", iface)
+		if err := ovsd.DeletePort(iface); err != nil {
+			// Don't return an error here, just log its occurrence.
+			// Something else may have removed the port already.
+			log.Printf("Error: %v\n", err)
+		}
+	}
+	return nil
+}
+
 func getExternalIDs(row map[string]interface{}) (map[string]string, error) {
 	rowVal, ok := row["external_ids"]
 	if !ok {
