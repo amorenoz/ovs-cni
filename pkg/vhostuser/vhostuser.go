@@ -181,7 +181,7 @@ func CmdAdd(args *skel.CmdArgs) error {
 	options := map[string]string{"vhost-server-path": vhostDev.Path}
 
 	if err := ovsBridgeDriver.CreatePort(portName, args.Netns, args.IfName, "" /* ovnPort */, netconf.OfportRequest,
-		vlanTag, nil /* trunks */, portType, intfType, "" /* contPodUid */, options); err != nil {
+		vlanTag, nil /* trunks */, portType, intfType, "" /* contPodUid */, netconf.MTU, options); err != nil {
 		// Clean up socket directory on OVS failure
 		if rmErr := os.Remove(socketDir); rmErr != nil {
 			log.Printf("Failed to clean up vhost-user socket directory %s: %v", socketDir, rmErr)
@@ -195,6 +195,7 @@ func CmdAdd(args *skel.CmdArgs) error {
 			{
 				Name:    args.IfName,
 				Sandbox: args.Netns,
+				Mtu:     netconf.MTU,
 			},
 		},
 	}

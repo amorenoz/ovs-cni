@@ -186,6 +186,81 @@ var _ = Describe("Vhost-User CNI Plugin", func() {
 			})
 		})
 
+		Context("ADD with MTU", func() {
+			It("should set mtu_request on the OVS interface and reflect MTU in the result", func() {
+				tmpDir := GinkgoT().TempDir()
+				socketPath := filepath.Join(tmpDir, "sock-dir", "vhost.sock")
+				devInfoFile := writeDevInfoFile(tmpDir, "client", socketPath)
+				conf := fmt.Sprintf(`{
+					"cniVersion": "1.0.0",
+					"name": "mynet",
+					"type": "ovs-vhostuser",
+					"bridge": "%s",
+					"mtu": 9000,
+					"runtimeConfig": {
+						"CNIDeviceInfoFile": "%s"
+					}
+				}`, bridgeName, devInfoFile)
+
+				args := cniArgs(containerID, IFNAME, conf)
+				r, _, err := cmdAddWithArgs(args, func() error {
+					return CmdAdd(args)
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Checking that the CNI result contains the correct MTU")
+				result, err := current.GetResult(r)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Interfaces).To(HaveLen(1))
+				Expect(result.Interfaces[0].Mtu).To(Equal(9000))
+
+				By("Checking that mtu_request is set on the OVS interface")
+				expectedPort := portName(containerID, IFNAME)
+				mtuRequest, err := getInterfaceAttribute(expectedPort, "mtu_request")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mtuRequest).To(Equal("9000"))
+
+				By("Cleanup")
+				err = cmdDelWithArgs(args, func() error {
+					return CmdDel(args)
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
+		Context("ADD without MTU", func() {
+			It("should not set mtu_request on the OVS interface and report zero MTU in the result", func() {
+				tmpDir := GinkgoT().TempDir()
+				socketPath := filepath.Join(tmpDir, "sock-dir", "vhost.sock")
+				devInfoFile := writeDevInfoFile(tmpDir, "client", socketPath)
+				conf := vhostUserConf("1.0.0", bridgeName, devInfoFile)
+
+				args := cniArgs(containerID, IFNAME, conf)
+				r, _, err := cmdAddWithArgs(args, func() error {
+					return CmdAdd(args)
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				By("Checking that the CNI result has zero MTU")
+				result, err := current.GetResult(r)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.Interfaces).To(HaveLen(1))
+				Expect(result.Interfaces[0].Mtu).To(Equal(0))
+
+				By("Checking that mtu_request is not set on the OVS interface")
+				expectedPort := portName(containerID, IFNAME)
+				mtuRequest, err := getInterfaceAttribute(expectedPort, "mtu_request")
+				Expect(err).NotTo(HaveOccurred())
+				Expect(mtuRequest).To(Equal("[]"))
+
+				By("Cleanup")
+				err = cmdDelWithArgs(args, func() error {
+					return CmdDel(args)
+				})
+				Expect(err).NotTo(HaveOccurred())
+			})
+		})
+
 		Context("DEL is idempotent", func() {
 			It("should not error when called twice", func() {
 				tmpDir := GinkgoT().TempDir()
