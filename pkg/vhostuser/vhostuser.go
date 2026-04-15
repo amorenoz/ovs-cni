@@ -21,25 +21,17 @@ import (
 	"fmt"
 	"log"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"syscall"
 
 	"github.com/containernetworking/cni/pkg/skel"
 	cnitypes "github.com/containernetworking/cni/pkg/types"
 	current "github.com/containernetworking/cni/pkg/types/100"
 	nadv1 "github.com/k8snetworkplumbingwg/network-attachment-definition-client/pkg/apis/k8s.cni.cncf.io/v1"
-	"golang.org/x/sys/unix"
 
 	"github.com/k8snetworkplumbingwg/ovs-cni/pkg/config"
 	"github.com/k8snetworkplumbingwg/ovs-cni/pkg/ovsdb"
 	"github.com/k8snetworkplumbingwg/ovs-cni/pkg/types"
 	"github.com/k8snetworkplumbingwg/ovs-cni/pkg/utils"
-)
-
-const (
-	targetGID   = 107 // This is the group ID of "qemu" user in kubevirt. FIXME: Make it configurable.
-	selinuxType = "system_u:object_r:container_file_t:s0"
 )
 
 func logCall(command string, args *skel.CmdArgs) {
@@ -78,43 +70,6 @@ func loadVhostUserDeviceInfo(devInfoFilePath string) (*nadv1.VhostDevice, error)
 	}
 
 	return devInfo.VhostUser, nil
-}
-
-func createSocketDir(dir string) error {
-	oldMask := syscall.Umask(0)
-	defer syscall.Umask(oldMask)
-	var err error
-	if err = os.MkdirAll(dir, 0775); err != nil {
-		return fmt.Errorf("failed to create vhost-user socket directory %s: %v", dir, err)
-	}
-
-	if err := unix.Chown(dir, -1, targetGID); err != nil {
-		return fmt.Errorf("failed to chown %s: %v", dir, err)
-	}
-
-	labelBytes := []byte(selinuxType)
-	if err := unix.Setxattr(dir, "security.selinux", labelBytes, 0); err != nil {
-		log.Printf("failed to setxattr %s: %v", dir, err)
-	}
-
-	if _, err := exec.LookPath("setfacl"); err == nil {
-		cmd := exec.Command("setfacl", "-R", "-m", "u:openvswitch:rwx", dir)
-		if err = cmd.Run(); err != nil {
-			if stderr, stderrErr := cmd.CombinedOutput(); stderrErr == nil {
-				return fmt.Errorf("failed to set ACL for openvswitch user on %s: %v, stderr: %s", dir, err, string(stderr))
-			}
-			return fmt.Errorf("failed to set ACL for openvswitch user on %s: %v", dir, err)
-		}
-
-		cmd = exec.Command("setfacl", "-R", "-d", "-m", "u:openvswitch:rwx", dir)
-		if err = cmd.Run(); err != nil {
-			if stderr, stderrErr := cmd.CombinedOutput(); stderrErr == nil {
-				return fmt.Errorf("failed to set default ACL for openvswitch user on %s: %v, stderr: %s", dir, err, string(stderr))
-			}
-			return fmt.Errorf("failed to set default ACL for openvswitch user on %s: %v", dir, err)
-		}
-	}
-	return err
 }
 
 // portName derives a deterministic OVS port name from container ID and
@@ -158,10 +113,6 @@ func CmdAdd(args *skel.CmdArgs) error {
 	portName := portName(args.ContainerID, args.IfName)
 	intfType := "dpdkvhostuserclient"
 	socketDir := filepath.Dir(vhostDev.Path)
-
-	if err := createSocketDir(socketDir); err != nil {
-		return fmt.Errorf("failed to create vhost-user socket directory %s: %v", socketDir, err)
-	}
 
 	// Cache for CmdDel
 	if err := utils.SaveCache(config.GetCRef(args.ContainerID, args.IfName),
@@ -234,13 +185,6 @@ func CmdDel(args *skel.CmdArgs) error {
 	if delErr := ovsBridgeDriver.DeletePort(portName); delErr != nil {
 		// Don't fail — port may already be gone (idempotent DEL per CNI spec)
 		log.Printf("Failed to remove vhost-user OVS port %s: %v", portName, delErr)
-	}
-
-	if cache.VhostUserSocketPath != "" {
-		socketDir := filepath.Dir(cache.VhostUserSocketPath)
-		if rmErr := os.Remove(socketDir); rmErr != nil {
-			log.Printf("Failed to remove vhost-user socket directory %s: %v", socketDir, rmErr)
-		}
 	}
 
 	return nil
